@@ -38,7 +38,9 @@ import (
 
 type ListReq struct {
 	model.PageReq
-	Path string `json:"path" form:"path"`
+	Path           string `json:"path" form:"path"`
+	OrderBy        string `json:"order_by" form:"order_by"`               // 排序字段: name, size, modified, type
+	OrderDirection string `json:"order_direction" form:"order_direction"` // 排序方向: asc, desc
 	// Refresh bool   `json:"refresh"`
 }
 
@@ -276,17 +278,22 @@ func GetDownloadSingleFile(ctx echo.Context) error {
 // @Tags file
 // @Security ApiKeyAuth
 // @Param path query string false "路径"
+// @Param order_by query string false "排序字段: name(文件名), size(文件大小), modified(修改时间), type(文件类型)"
+// @Param order_direction query string false "排序方向: asc(升序), desc(降序)"
 // @Success 200 {string} string "ok"
 // @Router /file/dirpath [get]
 func DirPath(ctx echo.Context) error {
 	var req ListReq
 	path := ctx.QueryParam("path")
 	req.Path = path
+	req.OrderBy = ctx.QueryParam("order_by")
+	req.OrderDirection = ctx.QueryParam("order_direction")
 	req.Validate()
 	info, err := service.MyService.System().GetDirPath(req.Path)
 	if err != nil {
 		return ctx.JSON(common_err.SERVICE_ERROR, model.Result{Success: common_err.SERVICE_ERROR, Message: common_err.GetMsg(common_err.SERVICE_ERROR), Data: err.Error()})
 	}
+
 	shares := service.MyService.Shares().GetSharesList()
 	sharesMap := make(map[string]string)
 	for _, v := range shares {
@@ -322,6 +329,10 @@ func DirPath(ctx echo.Context) error {
 			info[i].Extensions = ex
 		}
 	}
+	// 应用排序
+	if req.OrderBy != "" {
+		model.PathList(info).Sort(req.OrderBy, req.OrderDirection)
+	}
 	// Hide the files or folders in operation
 	fileQueue := make(map[string]string)
 	if len(service.OpStrArr) > 0 {
@@ -356,6 +367,7 @@ func DirPath(ctx echo.Context) error {
 
 		}
 	}
+
 	flist := FsListResp{
 		Content: pathList,
 		Total:   int64(len(info)),
